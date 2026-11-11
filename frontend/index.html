@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>firescout</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🔥%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500..800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.css" rel="stylesheet">
+  <link href="style.css" rel="stylesheet">
+</head>
+<body>
+  <div id="map" aria-label="interactive globe"></div>
+  <div id="loadbar" aria-hidden="true"></div>
+  <div id="setup" role="alert" hidden></div>
+
+  <!-- ============ left: layers ============ -->
+  <aside id="rail" class="panel" aria-label="layers and places">
+    <header class="panel-head">
+      <div>
+        <h1>firescout<span class="sparkle"></span></h1>
+        <p class="lede" id="lede">fires, sulfur dioxide and burn scars on one globe. click anywhere to read the area.</p>
+      </div>
+      <button class="panel-toggle" type="button" aria-expanded="true" aria-label="show or hide layers">layers</button>
+    </header>
+
+    <div class="panel-body">
+      <section class="sensor-section" aria-labelledby="h-sensor">
+        <h2 id="h-sensor">fire satellite</h2>
+        <div class="sensor-switch" role="group" aria-label="Active fire satellite source">
+          <button type="button" data-sensor="modis" aria-pressed="true">MODIS</button>
+          <button type="button" data-sensor="viirs" aria-pressed="false">VIIRS</button>
+        </div>
+        <p id="sensor-detail" class="note">MODIS: historical hotspot record since November 2000.</p>
+      </section>
+
+      <section aria-labelledby="h-layers">
+        <h2 id="h-layers">layers</h2>
+
+        <div class="layer" data-layer="so2">
+          <label class="switch"><input type="checkbox" checked><span>sulfur dioxide</span></label>
+          <p class="src">sentinel-5p column density, 7-day median</p>
+          <input type="range" class="opacity" min="0" max="1" step="0.05" value="0.7" aria-label="sulfur dioxide opacity">
+          <div class="legend"><i class="bar"></i><span class="lo"></span><span class="hi"></span></div>
+          <p class="status" role="status"></p>
+        </div>
+
+        <div class="layer" data-layer="fire">
+          <label class="switch"><input type="checkbox" checked><span>active fires</span></label>
+          <p class="src"><span id="fire-source-caption">MODIS FIRMS hotspots</span>, last 7 days</p>
+          <input type="range" class="opacity" min="0" max="1" step="0.05" value="1" aria-label="active fires opacity">
+          <div class="legend"><i class="bar"></i><span class="lo"></span><span class="hi"></span></div>
+          <p class="status" role="status"></p>
+        </div>
+
+        <div class="layer" data-layer="burn">
+          <label class="switch"><input type="checkbox"><span>burn scars</span></label>
+          <p class="src">sentinel-2 burn severity (dnbr) around your pin</p>
+          <input type="range" class="opacity" min="0" max="1" step="0.05" value="0.9" aria-label="burn scars opacity">
+          <div class="legend"><i class="bar"></i><span class="lo"></span><span class="hi"></span></div>
+          <p class="status" role="status"></p>
+        </div>
+
+        <label class="radius">
+          <span>area radius <b id="radius-val">150 km</b></span>
+          <input id="radius" type="range" min="25" max="300" step="5" value="150">
+        </label>
+      </section>
+
+      <section aria-labelledby="h-calendar">
+        <h2 id="h-calendar">burning activity calendar</h2>
+        <p class="note">select a place on the map to show satellite hotspot detections by day.</p>
+        <div class="calendar-nav"><button id="cal-prev" type="button" aria-label="Previous month">‹</button><strong id="cal-title">month</strong><button id="cal-next" type="button" aria-label="Next month">›</button></div>
+        <div class="cal-weekdays" aria-hidden="true"><span>su</span><span>mo</span><span>tu</span><span>we</span><span>th</span><span>fr</span><span>sa</span></div>
+        <div id="fire-calendar" class="fire-calendar" aria-label="Daily fire activity calendar"></div>
+        <p id="calendar-note" class="note" role="status">choose an area to load the calendar.</p>
+        <p class="note">colors show relative daily hotspot counts within this month, not number of fires or area burned.</p>
+      </section>
+
+      <section aria-labelledby="h-places">
+        <h2 id="h-places">try a place</h2>
+        <div class="presets" id="presets">
+          <button type="button" data-lat="34.05" data-lon="-118.55" data-date="2025-01-14" data-radius="60" data-zoom="7.2" data-for="school" data-burn="1">los angeles fires, jan 2025</button>
+          <button type="button" data-lat="50.2" data-lon="-73.5" data-date="2023-06-08" data-radius="250" data-zoom="4.6" data-for="curiosity" data-burn="0">quebec smoke, june 2023</button>
+          <button type="button" data-lat="41.0" data-lon="26.1" data-date="2023-08-28" data-radius="80" data-zoom="7" data-for="research" data-burn="1">evros wildfire, greece, aug 2023</button>
+          <button type="button" data-lat="19.4" data-lon="-155.28" data-date="2025-01-05" data-radius="100" data-zoom="7" data-for="research school" data-burn="0">kīlauea eruption, jan 2025</button>
+        </div>
+        <p class="note">kīlauea shows sulfur dioxide from a volcano, with no fires behind it.</p>
+      </section>
+
+      <section aria-labelledby="h-watch">
+        <h2 id="h-watch">watched places</h2>
+        <ul id="watchlist"></ul>
+        <p id="watch-empty" class="note">pin a place, then choose “watch this place”.</p>
+        <button id="watch-check" type="button" class="ghost" hidden>check all for this date</button>
+      </section>
+
+      <details class="how" id="how">
+        <summary>how the data is extracted</summary>
+        <p class="how-lead">nothing is downloaded or stored. every time you pick a date or drop a pin, google earth engine reads satellite archives for just that area and sends back map tiles and numbers.</p>
+        <ol>
+          <li data-layer="so2"><b>sulfur dioxide</b> comes from the sentinel-5p satellite. cloudy pixels (over 30% cloud) are thrown out, the 7 days up to your date are combined into a median, and the result is shown in dobson units. the readout compares it with the same area's average over the 30 days before.</li>
+          <li data-layer="fire"><b>active fires</b> come from your selected sensor: MODIS FIRMS (~1 km) or VIIRS VNP14A1 (a daily 1 km composite). Each satellite product has different detection characteristics, so counts are not directly comparable. The calendar shows daily detected fire pixels, not verified fires or prescribed burns.</li>
+          <li data-layer="burn"><b>burn scars</b> come from sentinel-2 photos. clouds, shadows and snow are masked, then each pixel's near-infrared and shortwave-infrared light is compared before the fire and now. a big drop (dnbr above 0.27) on land that was green before counts as burned, and the pixels are added up in hectares.</li>
+        </ol>
+        <p class="how-foot"><b>alert</b> = fire plus sulfur dioxide at 1.5 times normal or more. <b>watch</b> = 10+ fire pixels, or sulfur dioxide at 2 times normal. it means the two show up together, not that one caused the other.</p>
+      </details>
+    </div>
+  </aside>
+
+  <!-- ============ map tools ============ -->
+  <div id="nav" role="toolbar" aria-label="map navigation">
+    <button id="zoom-in" type="button" aria-label="zoom in" data-tip="zoom in"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button id="zoom-out" type="button" aria-label="zoom out" data-tip="zoom out"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+    <i class="sep"></i>
+    <button id="compass" type="button" aria-label="point north" data-tip="point north"><svg viewBox="0 0 24 24"><path d="M12 3l4 9h-8z" fill="currentColor"/><path d="M8 12l4 9 4-9" opacity=".45"/></svg></button>
+    <button id="home" type="button" aria-label="reset the view" data-tip="reset view"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg></button>
+    <button id="spin" type="button" aria-label="spin the globe" aria-pressed="false" data-tip="spin globe"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v5h-5"/></svg></button>
+    <button id="proj" type="button" aria-label="switch to flat map" data-tip="flat map"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 12h18M9 6v12M15 6v12"/></svg></button>
+  </div>
+  <p id="hint"><b>drag</b> to turn the globe · <b>scroll</b> to zoom · <b>click</b> to drop a pin · <b>click inside the dashed area</b> to open the fire render</p>
+
+  <!-- ============ right: readout ============ -->
+  <aside id="readout" class="panel" aria-label="area readout">
+    <header class="panel-head">
+      <div>
+        <h2 id="place">no place chosen</h2>
+        <p class="note" id="place-sub">click the globe, or pick a place on the left.</p>
+      </div>
+      <button class="panel-toggle" type="button" aria-expanded="true" aria-label="show or hide readout">readout</button>
+    </header>
+
+    <div class="panel-body">
+      <p id="signal" data-level="none">waiting for a location.</p>
+
+      <dl class="rows">
+        <div data-layer="fire"><dt>fire pixels</dt><dd id="v-fire">–</dd></div>
+        <div data-layer="so2"><dt>sulfur dioxide</dt><dd id="v-so2">–<small id="n-so2"></small></dd></div>
+        <div data-layer="burn"><dt>burned area</dt><dd id="v-burn">–</dd></div>
+      </dl>
+
+      <figure class="spark">
+        <canvas id="spark" height="84"></canvas>
+        <figcaption id="spark-cap">daily sulfur dioxide, dobson units</figcaption>
+      </figure>
+
+      <button id="render-open" type="button" class="solid render-btn" disabled>open fire render</button>
+      <button id="watch-add" type="button" class="ghost wide-btn" disabled>watch this place</button>
+    </div>
+  </aside>
+
+  <!-- ============ bottom: timeline ============ -->
+  <nav id="timeline" class="panel" aria-label="date">
+    <button id="play" type="button" aria-label="play through time">play</button>
+    <input id="slider" type="range" min="0" max="1" step="1" value="1" aria-label="date slider">
+    <div id="datebox"><button id="prev-day" class="step-btn" type="button" aria-label="one day earlier" title="one day earlier">‹</button><input id="date" type="date" aria-label="choose a date"><button id="next-day" class="step-btn" type="button" aria-label="one day later" title="one day later">›</button></div>
+    <p id="window-note"></p>
+  </nav>
+
+  <div id="fabs">
+    <button id="help-btn" class="fab" type="button" aria-haspopup="dialog" title="how it works"><b>?</b><span>how it works</span></button>
+    <button id="inspo-btn" class="fab" type="button" aria-haspopup="dialog" title="inspiration"><b>✦</b><span>inspo</span></button>
+  </div>
+
+  <!-- ============ intro: the cute questions ============ -->
+  <div id="intro" role="dialog" aria-modal="true" aria-label="welcome">
+    <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+    <div id="petals" aria-hidden="true"></div>
+
+    <div class="stage">
+      <form id="s-sensor" class="step card" autocomplete="off">
+        <p class="eyebrow">start exploring fire activity</p>
+        <h2 class="q">which satellite would you like to explore?</h2>
+        <p class="sensor-welcome-copy">Choose your fire hotspot dataset. You can switch sources anytime from the left panel.</p>
+        <div class="sensor-choices" role="radiogroup" aria-label="Choose fire satellite">
+          <label class="sensor-choice"><input type="radio" name="welcome-sensor" value="modis" checked><span><strong>MODIS</strong><small>Long historical record · since 2000</small></span></label>
+          <label class="sensor-choice"><input type="radio" name="welcome-sensor" value="viirs"><span><strong>VIIRS</strong><small>More recent observations · since 2012</small></span></label>
+        </div>
+        <button class="cta" type="submit"><span>continue</span> <i>→</i></button>
+      </form>
+
+      <svg class="logo-flame" viewBox="40 6 80 92" aria-hidden="true">
+        <defs><linearGradient id="fg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb347"/><stop offset=".55" stop-color="#f0502d"/><stop offset="1" stop-color="#b3200d"/></linearGradient></defs>
+        <path d="M80 12c10 18 30 28 30 52a30 30 0 0 1-60 0c0-14 8-22 14-32 2 8 6 12 10 14 0-12-2-22 6-34Z" fill="url(#fg)"/>
+        <path d="M80 48c6 10 14 14 14 26a14 14 0 0 1-28 0c0-8 6-12 14-26Z" fill="#ffe2a8"/>
+      </svg>
+      <p class="brand">firescout</p>
+
+      <form id="s-name" class="step card" autocomplete="off">
+        <h2 class="q">hi what's your name?</h2>
+        <input id="w-name" type="text" maxlength="30" autocomplete="given-name" placeholder="type it here" aria-label="your name">
+        <button class="cta" type="submit"><span>next</span> <i>→</i></button>
+        <button class="back" id="w-sensor-back" type="button">← back to satellites</button>
+      </form>
+
+      <form id="s-why" class="step card" autocomplete="off">
+        <h2 class="q">hi <span id="w-hello" class="name"></span>, what are you using this app for?</h2>
+        <div class="opts" role="radiogroup" aria-label="what are you using this app for">
+          <label class="opt"><input type="radio" name="why" value="school"><span>school project</span></label>
+          <label class="opt"><input type="radio" name="why" value="research"><span>research paper</span></label>
+          <label class="opt"><input type="radio" name="why" value="curiosity"><span>curiosity</span></label>
+          <label class="opt"><input type="radio" name="why" value="other"><span>other</span></label>
+        </div>
+        <div class="other" id="w-other-wrap"><div><input id="w-other" type="text" maxlength="60" placeholder="tell me in a few words" aria-label="other purpose"></div></div>
+        <button class="cta" type="submit" id="w-go" disabled><span>let's go</span> <i>→</i></button>
+        <button class="back" type="button" id="w-back">← back</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ quick tour popup ============ -->
+  <div id="tour" class="modal" role="dialog" aria-modal="true" aria-labelledby="t-title" hidden>
+    <div class="card tour-card">
+      <p class="eyebrow">quick tour</p>
+      <h2 id="t-title">here's how it works</h2>
+      <ol class="tour-list">
+        <li><b>1</b><div><strong>choose MODIS or VIIRS</strong><span>switch fire satellite sources from the left panel. Compare daily patterns with the burning activity calendar.</span></div></li>
+        <li><b>2</b><div><strong>tap the globe</strong><span>drag to turn it, scroll to zoom, then click to drop a pin and read fires, sulfur dioxide and burned area for that spot. click inside the dashed area to open the fire render and hover it for details.</span></div></li>
+        <li><b>3</b><div><strong>flip the layers</strong><span>use the toggles on the left. burn scars needs a pin first.</span></div></li>
+        <li><b>4</b><div><strong>travel through time</strong><span>press play, drag the slider, or pick a date at the bottom.</span></div></li>
+        <li><b>5</b><div><strong>watch your places</strong><span>save a pin, then “check all for this date”.</span></div></li>
+      </ol>
+      <p class="tip">new here? start with “los angeles fires, jan 2025” under try a place</p>
+      <button class="cta" type="button" id="tour-go"><span>got it, let's explore</span> <i>→</i></button>
+    </div>
+  </div>
+
+  <!-- ============ name-a-place popup ============ -->
+  <div id="namer" class="modal" role="dialog" aria-modal="true" aria-labelledby="n-title" hidden>
+    <form class="card small" id="namer-form" autocomplete="off">
+      <h2 id="n-title">name this place</h2>
+      <input id="namer-input" type="text" maxlength="40" aria-label="place name">
+      <div class="row">
+        <button class="cta" type="submit"><span>save</span></button>
+        <button class="back" type="button" id="namer-cancel">cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ============ inspo popup ============ -->
+  <div id="inspo" class="modal" role="dialog" aria-modal="true" aria-labelledby="i-title" hidden>
+    <div class="card wide">
+      <button class="x" type="button" id="inspo-x" aria-label="close">×</button>
+      <h2 id="i-title">where this came from</h2>
+      <!-- EDIT ME: add more of your own story here -->
+      <p>hi, i'm bhavishaya vignesh. i used to live in canada, and i lived through the wildfires in alberta and british columbia. the smoke changed the sky and the air we breathed, and it was hard on my family. i wanted to understand what was in that air and how to see it coming, and satellites turned out to see it first. i built firescout because if the data is already up there, it should feel as friendly as opening a map.</p>
+      <div class="award">
+        <b class="medal" aria-hidden="true">★</b>
+        <div>
+          <strong>tri-valley air quality award</strong>
+          <p>i won the tri-valley air quality award for this project and the research behind it on sulfur scout and wildfires. firescout is where that research became something anyone can open and explore.</p>
+        </div>
+      </div>
+      <!-- EDIT ME: add the year, the awarding organization's full name, or a quote from the judges here -->
+      <h3>the research behind it</h3>
+      <p>my research started with a simple question: can satellite data show how wildfires and sulfur dioxide are connected to the air people breathe? i studied sulfur dioxide with sulfur scout, studied wildfires through fire hotspots and burn scars, and then put both on one globe so i can compare them for the same place and the same dates.</p>
+      <h3>my applications</h3>
+      <div class="apps">
+        <article>
+          <div class="art"><svg viewBox="0 0 160 100" aria-hidden="true"><rect width="160" height="100" rx="14" fill="#efeaff"/><path d="M20 84 42 42 64 84Z" fill="#9b86e8"/><path d="M42 42c-6-14 10-18 8-30 14 8 22 20 10 34" fill="#fff" opacity=".85"/><circle cx="126" cy="26" r="12" fill="#d9d0ff"/><path d="M70 64c20-10 34 6 58-4" stroke="#6a4bd8" stroke-width="5" fill="none" stroke-linecap="round"/></svg><img src="img/sulfur-scout.jpg" alt="sulfur scout" onerror="this.remove()"></div>
+          <h4>sulfur scout</h4>
+          <p>i use sulfur scout to follow sulfur dioxide from space. the layer reads sentinel-5p satellite data as a 7-day median, then compares any pinned spot with its own 30-day normal, so a volcano like kīlauea or an industrial plume stands out at a glance.</p>
+        </article>
+        <article>
+          <div class="art"><svg viewBox="0 0 160 100" aria-hidden="true"><rect width="160" height="100" rx="14" fill="#fdeceb"/><path d="M80 12c10 18 30 28 30 52a30 30 0 0 1-60 0c0-14 8-22 14-32 2 8 6 12 10 14 0-12-2-22 6-34Z" fill="#e5391f"/><path d="M80 48c6 10 14 14 14 26a14 14 0 0 1-28 0c0-8 6-12 14-26Z" fill="#ffb347"/></svg><img src="img/wildfire-detection.jpg" alt="wildfire detection" onerror="this.remove()"></div>
+          <h4>wildfire detection</h4>
+          <p>for wildfires, i pair nasa firms hotspots with sentinel-2 burn scars. drop a pin and firescout counts fire pixels, measures burned hectares, and flags when fires and raised sulfur dioxide show up together, like during the los angeles fires of january 2025.</p>
+        </article>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ============ fire render (opens when you click the area of interest) ============ -->
+  <div id="render" class="modal" role="dialog" aria-modal="true" aria-labelledby="r-title" hidden>
+    <div class="card render-card">
+      <button class="x" type="button" id="render-x" aria-label="close">×</button>
+      <p class="eyebrow">fire render</p>
+      <h2 id="r-title">your area</h2>
+      <p class="note" id="r-sub"></p>
+
+      <div class="render-grid">
+        <div class="render-stage" id="r-stage">
+          <video id="r-video" muted loop playsinline preload="none" poster="media/fire-render-poster.jpg" aria-label="3d render of a wildfire"></video>
+          <svg id="r-zones" viewBox="0 0 1600 900" preserveAspectRatio="none" aria-label="hoverable parts of the fire">
+            <rect class="zone" data-zone="air" tabindex="0" role="button" aria-label="air quality" x="0" y="0" width="1600" height="900"/>
+            <rect class="zone" data-zone="fire" tabindex="0" role="button" aria-label="fire pixels" rx="60"/>
+            <rect class="zone" data-zone="heat" tabindex="0" role="button" aria-label="heat intensity" rx="60"/>
+            <ellipse class="zone" data-zone="burn" tabindex="0" role="button" aria-label="burned area"/>
+            <rect class="zone" data-zone="smoke" tabindex="0" role="button" aria-label="smoke" rx="60"/>
+            <g id="r-dots" aria-hidden="true"></g>
+          </svg>
+          <div id="r-tip" role="status" hidden></div>
+          <p id="r-loading" class="r-loading">loading render…</p>
+          <button id="r-play" class="r-play" type="button" aria-label="pause the render">pause</button>
+          <p class="r-hint">hover (or tap) the fire to read it</p>
+        </div>
+
+        <ul id="r-list" class="r-list" aria-label="what the render shows"></ul>
+      </div>
+
+      <p class="r-foot">the render is an illustration of a fire, not a live simulation. the numbers are firescout's satellite readings for the area you pinned.</p>
+    </div>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="intro.js"></script>
+  <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js"></script>
+  <script src="app.js"></script>
+  <script src="render.js"></script>
+</body>
+</html>
